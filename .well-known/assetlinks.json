@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "io.github.spot_ciken.twa",
+    "sha256_cert_fingerprints": [
+      "1D:E9:39:A8:F3:26:73:0F:60:2D:66:7E:A8:F7:30:F3:8A:F9:2C:0D:78:78:E4:1E:1A:FD:1D:9B:12:DE:FE:54"
+    ]
+  }
+}]
