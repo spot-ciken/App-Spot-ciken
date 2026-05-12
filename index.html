@@ -59,7 +59,7 @@ select.ui-select{font-family:'IBM Plex Mono',monospace;font-size:.68rem;padding:
 .bar:nth-child(4){height:13px;animation-delay:.1s;}
 @keyframes soundBar{0%,100%{transform:scaleY(.4)}50%{transform:scaleY(1.2)}}
 @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
-.nav-buttons{display:flex;gap:8px;justify-content:center;margin-bottom:14px;}
+.nav-buttons{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:14px;}
 .nav-btn{font-family:'IBM Plex Mono',monospace;font-size:.67rem;letter-spacing:.1em;text-transform:uppercase;padding:9px 18px;border:1.5px solid var(--border);background:transparent;color:var(--text);cursor:pointer;border-radius:2px;transition:all .15s;}
 .nav-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent);}
 .nav-btn:disabled{opacity:.25;cursor:not-allowed;}
@@ -134,7 +134,6 @@ select.ui-select{font-family:'IBM Plex Mono',monospace;font-size:.68rem;padding:
 
 <!-- Controls -->
 <div class="controls">
-  <button class="btn primary" id="btnPlay">▶ AUTO-PLAY</button>
   <button class="btn" id="btnReset">↺ RESET</button>
   <button class="btn" id="btnUpload" onclick="$('fileInput').click()">📂 UPLOAD</button>
   <button class="btn" id="btnReverse" onclick="toggleReverse()">⇅ BALIK</button>
@@ -279,10 +278,14 @@ select.ui-select{font-family:'IBM Plex Mono',monospace;font-size:.68rem;padding:
 
 <!-- Nav -->
 <div class="nav-buttons" id="navButtons" style="display:none">
+  <button class="btn primary" id="btnPlay" style="width:100%;margin-bottom:8px;font-size:.85rem;padding:12px">▶ AUTO-PLAY</button>
   <button class="nav-btn" id="btnPrev">← PREV</button>
   <button class="nav-btn" id="btnSpeak">🔊 UCAP</button>
   <button class="nav-btn" id="btnNext">NEXT →</button>
 </div>
+
+<!-- Catatan sesi -->
+<div id="noteBox" style="display:none;background:#1a1a1a;border:1px solid #333;border-radius:4px;padding:12px 14px;margin-bottom:14px;font-family:'IBM Plex Mono',monospace;font-size:.72rem;color:#aaa;white-space:pre-wrap;line-height:1.6"></div>
 
 <!-- Done -->
 <div class="done-banner" id="doneBanner">
@@ -1263,7 +1266,7 @@ function jumpTo(qIdx){
 
 // ============ READ MODE ============
 let queue=[],currentIdx=0,isPlaying=false,autoTimer=null,sessionCount=0,timerInterval=null,elapsed=0;
-let readMode='en', repeatDone=0, loopCount=0, docLoopDone=0;
+let readMode='en', repeatDone=0, loopCount=0, docLoopDone=0, sessionNote='';
 function getDocLoop(){ const s=$('docLoopSelect'); return s?parseInt(s.value):1; }
 let skippedIndices=new Set(); // index ke ACTIVE_WORDS yang di-skip
 
@@ -1571,7 +1574,10 @@ function handleFile(file){
       } else {
         const wb=XLSX.read(e.target.result,{type:'binary'});
         const ws=wb.Sheets[wb.SheetNames[0]];
-        XLSX.utils.sheet_to_json(ws,{header:1}).forEach(row=>{
+        const rows=XLSX.utils.sheet_to_json(ws,{header:1});
+        // Ambil catatan dari kolom C baris pertama
+        sessionNote = rows.length && rows[0][2] ? String(rows[0][2]).trim() : '';
+        rows.forEach(row=>{
           const en=row[0]?String(row[0]).trim():''; const id=row[1]?String(row[1]).trim():'';
           if(en) newWords.push([en,id]);
         });
@@ -1580,13 +1586,16 @@ function handleFile(file){
       ACTIVE_WORDS.length=0; newWords.forEach(w=>ACTIVE_WORDS.push(w));
       safeShow('uploadBanner','block');
       safeText('uploadInfo','✓ '+newWords.length+' kata dari "'+file.name+'"'); safeShow('uploadBanner','block');
+      // Tampilkan catatan jika ada
+      const nb=$('noteBox');
+      if(nb){ if(sessionNote){ nb.textContent=sessionNote; nb.style.display='block'; } else { nb.style.display='none'; } }
       initRead();
     }catch(err){ alert('Gagal baca file: '+err.message); }
   };
   if(file.name.endsWith('.csv')) reader.readAsText(file,'UTF-8');
   else reader.readAsBinaryString(file);
 }
-function clearDataset(){ ACTIVE_WORDS.length=0; DEFAULT_WORDS.forEach(w=>ACTIVE_WORDS.push(w)); safeShow('uploadBanner','none'); safeText('uploadInfo','✓ 840 kata (bawaan)'); initRead(); }
+function clearDataset(){ ACTIVE_WORDS.length=0; DEFAULT_WORDS.forEach(w=>ACTIVE_WORDS.push(w)); safeShow('uploadBanner','none'); safeText('uploadInfo','✓ 840 kata (bawaan)'); sessionNote=''; const nb=$('noteBox'); if(nb) nb.style.display='none'; initRead(); }
 on('fileInput','change',e=>{ handleFile(e.target.files[0]); e.target.value=''; });
 
 
@@ -1622,14 +1631,18 @@ if('serviceWorker' in navigator){
   const swCode = `
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open('vocabflow-v1').then(cache =>
+    caches.open('vocabflow-v3').then(cache =>
       cache.addAll([location.pathname])
     )
   );
   self.skipWaiting();
 });
 self.addEventListener('activate', e => {
-  e.waitUntil(self.clients.claim());
+  e.waitUntil(
+    caches.keys().then(keys => Promise.all(
+      keys.filter(k => k !== 'vocabflow-v3').map(k => caches.delete(k))
+    )).then(() => self.clients.claim())
+  );
 });
 self.addEventListener('fetch', e => {
   e.respondWith(
